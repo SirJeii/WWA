@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Quiz Creator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .number-box.visited {
+            background-color: #6b7280 !important;
+            cursor: default;
+            transform: scale(0.95);
+        }
+        .number-box.visited:hover {
+            transform: scale(0.95);
+            box-shadow: none;
+        }
+        .random-active {
+            transform: scale(1.15) !important;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important;
+        }
+        #confetti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 9999;
+        }
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            opacity: 0.7;
+            animation: fall 5s linear forwards;
+        }
+        @keyframes fall {
+            to {
+                transform: translateY(100vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Page 1: Quiz Creation -->
+    <div id="creation-page" class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-4xl bg-white p-8 rounded-2xl shadow-lg">
+            <h1 class="text-4xl font-bold text-center text-gray-800 mb-2">Create Your Quiz</h1>
+            <p class="text-center text-gray-500 mb-6">Enter questions manually, upload an Excel file, or generate them with AI.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div class="border p-4 rounded-lg">
+                    <h3 class="font-semibold text-lg mb-2 text-center">Upload from File</h3>
+                    <label for="excel-upload-input" class="cursor-pointer w-full text-center block bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
+                        Upload Excel File
+                    </label>
+                    <input type="file" id="excel-upload-input" class="hidden" accept=".xlsx, .xls, .csv">
+                    <p class="text-center text-gray-400 mt-2 text-sm">Questions in column 1, answers in column 2.</p>
+                </div>
+                <div class="border p-4 rounded-lg">
+                     <h3 class="font-semibold text-lg mb-2 text-center">Generate with AI</h3>
+                    <div class="flex items-center justify-center gap-2">
+                         <label for="handout-upload-input" class="cursor-pointer text-center bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-transform transform hover:scale-105">
+                            Upload Handout
+                        </label>
+                        <input type="file" id="handout-upload-input" class="hidden" accept=".txt,.pdf,.docx">
+                        <select id="num-questions-select" class="p-2 border rounded-md">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                            <option value="40">40</option>
+                            <option value="50">50</option>
+                            <option value="60">60</option>
+                        </select>
+                        <button id="generate-ai-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+                            <span id="ai-btn-text">Generate</span>
+                            <div id="ai-loader" class="loader hidden"></div>
+                        </button>
+                    </div>
+                     <p id="handout-filename" class="text-center text-gray-500 mt-2 text-sm truncate"></p>
+                </div>
+            </div>
+
+            <div id="questions-container" class="space-y-4 max-h-[40vh] overflow-y-auto pr-4">
+                <p id="empty-state-message" class="text-center text-gray-400 my-8">Click "Add Question" or use one of the options above to get started!</p>
+                <!-- Question and Answer fields will be injected here -->
+            </div>
+
+            <div class="flex justify-between items-center mt-8">
+                <div>
+                    <button id="add-question-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 mr-2">Add Question Manually</button>
+                    <button id="delete-all-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Delete All</button>
+                </div>
+                <button id="save-quiz-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Save & Start Quiz</button>
+            </div>
+             <p id="error-message" class="text-red-500 text-center mt-4"></p>
+        </div>
+    </div>
+
+    <!-- Page 2: Quiz Gameplay -->
+    <div id="game-page" class="hidden">
+        <div id="confetti-container"></div>
+        <div id="quiz-container" class="w-full max-w-7xl mx-auto p-6">
+            <h1 class="text-5xl font-bold text-center text-gray-800 mb-2">Interactive Quiz</h1>
+            <h2 class="text-2xl text-center text-gray-500 mb-10">Select a number or let us pick one for you!</h2>
+            <div id="number-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-4 mb-10"></div>
+            
+            <div id="main-controls" class="flex justify-center gap-4 mb-10">
+                <button id="random-pick-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Pick a Random Question</button>
+                <button id="reset-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Reset Quiz</button>
+                <button id="new-quiz-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Edit Quiz</button>
+            </div>
+        </div>
+
+        <!-- Modal Structure -->
+        <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden transition-opacity duration-300">
+            <div id="modal" class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-lg text-center transform transition-transform duration-300 scale-95">
+                <h3 id="modal-question-number" class="text-xl font-bold text-gray-500 mb-4"></h3>
+                <p id="modal-question-text" class="text-2xl text-gray-800 mb-6"></p>
+                <div id="modal-answer-box" class="hidden text-2xl font-bold text-green-800 bg-green-100 border border-green-200 rounded-lg p-4 my-4"></div>
+                <div id="modal-controls" class="flex justify-center gap-4 mt-6">
+                    <button id="modal-show-answer-btn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg">Show Answer</button>
+                    <button id="modal-close-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Common Elements ---
+            const creationPage = document.getElementById('creation-page');
+            const gamePage = document.getElementById('game-page');
+            let quizData = [];
+
+            // --- Creation Page Elements & Logic ---
+            const questionsContainer = document.getElementById('questions-container');
+            const addQuestionBtn = document.getElementById('add-question-btn');
+            const deleteAllBtn = document.getElementById('delete-all-btn');
+            const saveQuizBtn = document.getElementById('save-quiz-btn');
+            const errorMessage = document.getElementById('error-message');
+            const emptyStateMessage = document.getElementById('empty-state-message');
+            const excelUploadInput = document.getElementById('excel-upload-input');
+            const handoutUploadInput = document.getElementById('handout-upload-input');
+            const handoutFilename = document.getElementById('handout-filename');
+            const numQuestionsSelect = document.getElementById('num-questions-select');
+            const generateAiBtn = document.getElementById('generate-ai-btn');
+            const aiBtnText = document.getElementById('ai-btn-text');
+            const aiLoader = document.getElementById('ai-loader');
+            let questionCount = 0;
+            let handoutContent = '';
+
+            const addQuestionField = (question = '', answer = '') => {
+                if (questionCount >= 60) {
+                    errorMessage.textContent = "You can add a maximum of 60 questions.";
+                    addQuestionBtn.disabled = true;
+                    return;
+                }
+                emptyStateMessage?.classList.add('hidden');
+                questionCount++;
+                const questionId = `q-${Date.now()}-${questionCount}`;
+                const fieldHTML = `
+                    <div id="${questionId}" class="p-4 border rounded-lg bg-gray-50 flex items-center gap-4">
+                        <span class="text-xl font-bold text-gray-500">${questionCount}.</span>
+                        <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" placeholder="Question" class="question-input w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500" value="${question}">
+                            <input type="text" placeholder="Answer" class="answer-input w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500" value="${answer}">
+                        </div>
+                        <button class="remove-question-btn text-red-500 hover:text-red-700 font-bold text-2xl">&times;</button>
+                    </div>
+                `;
+                questionsContainer.insertAdjacentHTML('beforeend', fieldHTML);
+                
+                const newField = document.getElementById(questionId);
+                newField.querySelector('.remove-question-btn').addEventListener('click', () => {
+                    newField.remove();
+                    updateQuestionNumbers();
+                    errorMessage.textContent = "";
+                    addQuestionBtn.disabled = false;
+                    if (questionCount === 0) {
+                        emptyStateMessage?.classList.remove('hidden');
+                    }
+                });
+            };
+            
+            const updateQuestionNumbers = () => {
+                const allFields = questionsContainer.querySelectorAll('.p-4');
+                allFields.forEach((field, index) => {
+                    field.querySelector('span').textContent = `${index + 1}.`;
+                });
+                questionCount = allFields.length;
+            };
+
+            const handleExcelUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                        questionsContainer.innerHTML = '';
+                        emptyStateMessage?.classList.add('hidden');
+                        
+                        const validData = jsonData.filter(row => Array.isArray(row) && row.length >= 2 && String(row[0]).trim() && String(row[1]).trim());
+
+                        if (validData.length > 60) {
+                             errorMessage.textContent = "Your file has over 60 questions. Only the first 60 were imported.";
+                             validData.splice(60);
+                        } else {
+                             errorMessage.textContent = "";
+                        }
+
+                        if (validData.length === 0) {
+                             errorMessage.textContent = "Could not find any valid questions and answers in the uploaded file.";
+                             emptyStateMessage?.classList.remove('hidden');
+                             return;
+                        }
+
+                        validData.forEach(row => {
+                            const question = String(row[0]).trim();
+                            const answer = String(row[1]).trim();
+                            addQuestionField(question, answer);
+                        });
+                        updateQuestionNumbers();
+                    } catch (error) {
+                        console.error("Error processing file:", error);
+                        errorMessage.textContent = "Error processing file. Please ensure it's a valid Excel (.xlsx, .xls) or CSV file.";
+                    }
+                };
+                reader.onerror = (error) => {
+                    console.error("File read error:", error);
+                    errorMessage.textContent = "The selected file could not be read.";
+                };
+                reader.readAsArrayBuffer(file);
+                event.target.value = ''; // Reset file input
+            };
+
+            const handleHandoutUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                handoutFilename.textContent = file.name;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    handoutContent = e.target.result;
+                };
+                reader.readAsText(file);
+            };
+            
+            const callGeminiAPI = async (prompt) => {
+                const apiKey = ""; // Leave empty, handled by environment
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                "questions": {
+                                    "type": "ARRAY",
+                                    "items": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "question": { "type": "STRING" },
+                                            "answer": { "type": "STRING" }
+                                        },
+                                        "required": ["question", "answer"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+                
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    const jsonText = result.candidates[0].content.parts[0].text;
+                    return JSON.parse(jsonText);
+
+                } catch (error) {
+                    console.error("Gemini API error:", error);
+                    throw error;
+                }
+            };
+
+            const deleteAllQuestions = () => {
+                questionsContainer.innerHTML = '';
+                questionsContainer.appendChild(emptyStateMessage);
+                emptyStateMessage.classList.remove('hidden');
+                questionCount = 0;
+                errorMessage.textContent = "";
+                addQuestionBtn.disabled = false;
+                handoutFilename.textContent = "";
+                handoutContent = "";
+            };
+
+            generateAiBtn.addEventListener('click', async () => {
+                if (!handoutContent) {
+                    errorMessage.textContent = "Please upload a handout file first.";
+                    return;
+                }
+
+                aiBtnText.classList.add('hidden');
+                aiLoader.classList.remove('hidden');
+                generateAiBtn.disabled = true;
+                errorMessage.textContent = "Generating questions... this may take a moment.";
+
+                const numQuestions = numQuestionsSelect.value;
+                const prompt = `Based on the following text, generate exactly ${numQuestions} question and answer pairs suitable for a quiz. The questions should be clear and the answers concise.
+
+Text:
+${handoutContent}`;
+                
+                try {
+                    const result = await callGeminiAPI(prompt);
+                    
+                    deleteAllQuestions(); // Clear existing before adding new ones
+
+                    if (result.questions && result.questions.length > 0) {
+                        result.questions.forEach(qa => {
+                            addQuestionField(qa.question, qa.answer);
+                        });
+                        updateQuestionNumbers();
+                        errorMessage.textContent = `${result.questions.length} questions generated successfully!`;
+                    } else {
+                        errorMessage.textContent = "The AI could not generate questions from the provided text. Please try a different file.";
+                    }
+
+                } catch (error) {
+                    errorMessage.textContent = "An error occurred while generating questions. Please try again.";
+                } finally {
+                    aiBtnText.classList.remove('hidden');
+                    aiLoader.classList.add('hidden');
+                    generateAiBtn.disabled = false;
+                }
+            });
+
+            addQuestionBtn.addEventListener('click', () => addQuestionField());
+            deleteAllBtn.addEventListener('click', deleteAllQuestions);
+            excelUploadInput.addEventListener('change', handleExcelUpload);
+            handoutUploadInput.addEventListener('change', handleHandoutUpload);
+
+
+            saveQuizBtn.addEventListener('click', () => {
+                let validQuestions = [];
+                const questionFields = questionsContainer.querySelectorAll('.p-4');
+                
+                errorMessage.textContent = "";
+
+                questionFields.forEach((field) => {
+                    const questionInput = field.querySelector('.question-input');
+                    const answerInput = field.querySelector('.answer-input');
+                    const question = questionInput.value.trim();
+                    const answer = answerInput.value.trim();
+
+                    if (question && answer) {
+                        validQuestions.push({ question, answer });
+                    }
+                });
+
+                if (validQuestions.length < 3) {
+                    errorMessage.textContent = "Please enter at least 3 valid questions to save the quiz.";
+                    return;
+                }
+                
+                quizData = validQuestions.map((item, index) => ({
+                    id: index + 1,
+                    question: item.question,
+                    answer: item.answer
+                }));
+
+                localStorage.setItem('customQuizData', JSON.stringify(quizData));
+                creationPage.classList.add('hidden');
+                gamePage.classList.remove('hidden');
+                initializeQuiz();
+            });
+
+            // --- Game Page Elements & Logic ---
+            const numberGrid = document.getElementById('number-grid');
+            const randomPickBtn = document.getElementById('random-pick-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const newQuizBtn = document.getElementById('new-quiz-btn');
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modal = document.getElementById('modal');
+            const modalQuestionNumber = document.getElementById('modal-question-number');
+            const modalQuestionText = document.getElementById('modal-question-text');
+            const modalAnswerBox = document.getElementById('modal-answer-box');
+            const modalShowAnswerBtn = document.getElementById('modal-show-answer-btn');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+
+            let currentAnswer = '';
+            let availableQuestionIds = [];
+
+            const initializeQuiz = () => {
+                const storedData = localStorage.getItem('customQuizData');
+                if (storedData) {
+                    quizData = JSON.parse(storedData);
+                }
+
+                if (quizData.length === 0) {
+                    gamePage.classList.add('hidden');
+                    creationPage.classList.remove('hidden');
+                    return;
+                }
+
+                numberGrid.innerHTML = '';
+                availableQuestionIds = quizData.map(q => q.id);
+                randomPickBtn.textContent = "Pick a Random Question";
+                randomPickBtn.disabled = false;
+                document.getElementById('confetti-container').innerHTML = '';
+
+                quizData.forEach(q => {
+                    const box = document.createElement('div');
+                    box.className = 'number-box bg-blue-500 text-white rounded-lg p-5 text-4xl font-bold cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl hover:scale-105 flex items-center justify-center';
+                    box.textContent = q.id;
+                    box.dataset.id = q.id;
+                    numberGrid.appendChild(box);
+                });
+            };
+
+            const displayQuestion = (id) => {
+                const questionData = quizData.find(q => q.id === id);
+                if (!questionData) return;
+
+                const box = numberGrid.querySelector(`.number-box[data-id='${id}']`);
+                if (box.classList.contains('visited')) return;
+
+                modalQuestionNumber.textContent = `Question #${questionData.id}`;
+                modalQuestionText.textContent = questionData.question;
+                currentAnswer = questionData.answer;
+
+                modalAnswerBox.classList.add('hidden');
+                modalShowAnswerBtn.classList.remove('hidden');
+                modalOverlay.classList.remove('hidden');
+                setTimeout(() => {
+                    modalOverlay.classList.remove('opacity-0');
+                    modal.classList.remove('scale-95');
+                }, 10);
+
+                box.classList.add('visited');
+                const index = availableQuestionIds.indexOf(id);
+                if (index > -1) {
+                    availableQuestionIds.splice(index, 1);
+                }
+
+                if (availableQuestionIds.length === 0) {
+                    randomPickBtn.textContent = "Quiz Complete!";
+                    randomPickBtn.disabled = true;
+                    launchConfetti();
+                }
+            };
+
+            const startRandomAnimation = () => {
+                const availableBoxes = Array.from(numberGrid.querySelectorAll('.number-box:not(.visited)'));
+                if (availableBoxes.length === 0) return;
+
+                randomPickBtn.disabled = true;
+                const duration = 2000;
+                const interval = 100;
+                const colors = ['#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
+                let lastBox = null;
+
+                const animation = setInterval(() => {
+                    if (lastBox) {
+                        lastBox.classList.remove('random-active');
+                        lastBox.style.backgroundColor = '';
+                    }
+                    const randomBox = availableBoxes[Math.floor(Math.random() * availableBoxes.length)];
+                    randomBox.classList.add('random-active');
+                    randomBox.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    lastBox = randomBox;
+                }, interval);
+
+                setTimeout(() => {
+                    clearInterval(animation);
+                    if (lastBox) {
+                        lastBox.classList.remove('random-active');
+                        lastBox.style.backgroundColor = '';
+                        const finalId = parseInt(lastBox.dataset.id);
+                        displayQuestion(finalId);
+                    }
+                    if (availableQuestionIds.length > 0) {
+                        randomPickBtn.disabled = false;
+                    }
+                }, duration);
+            };
+
+            const closeModal = () => {
+                modalOverlay.classList.add('opacity-0');
+                modal.classList.add('scale-95');
+                setTimeout(() => {
+                    modalOverlay.classList.add('hidden');
+                }, 300);
+            };
+
+            const launchConfetti = () => {
+                const confettiContainer = document.getElementById('confetti-container');
+                const confettiColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+                for (let i = 0; i < 150; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.classList.add('confetti');
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.animationDuration = Math.random() * 3 + 2 + 's';
+                    confetti.style.backgroundColor = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+                    const size = Math.random() * 8 + 6;
+                    confetti.style.width = `${size}px`;
+                    confetti.style.height = `${size}px`;
+                    confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+                    confettiContainer.appendChild(confetti);
+                }
+            };
+
+            numberGrid.addEventListener('click', (event) => {
+                if (event.target.classList.contains('number-box')) {
+                    const id = parseInt(event.target.dataset.id);
+                    displayQuestion(id);
+                }
+            });
+
+            modalShowAnswerBtn.addEventListener('click', () => {
+                modalAnswerBox.textContent = currentAnswer;
+                modalAnswerBox.classList.remove('hidden');
+                modalShowAnswerBtn.classList.add('hidden');
+            });
+
+            modalCloseBtn.addEventListener('click', closeModal);
+            modalOverlay.addEventListener('click', (event) => {
+                if (event.target === modalOverlay) {
+                    closeModal();
+                }
+            });
+
+            randomPickBtn.addEventListener('click', startRandomAnimation);
+            resetBtn.addEventListener('click', initializeQuiz);
+            newQuizBtn.addEventListener('click', () => {
+                gamePage.classList.add('hidden');
+                creationPage.classList.remove('hidden');
+            });
+            
+            // --- Initial Load ---
+            const loadQuizFromStorage = () => {
+                const storedData = localStorage.getItem('customQuizData');
+                if (storedData) {
+                    const parsedData = JSON.parse(storedData);
+                    if (parsedData && parsedData.length > 0) {
+                        questionsContainer.innerHTML = ''; // Clear any existing fields
+                        questionsContainer.appendChild(emptyStateMessage); // Re-add the empty message
+                        questionCount = 0;
+                        parsedData.forEach(qa => {
+                            addQuestionField(qa.question, qa.answer);
+                        });
+                        updateQuestionNumbers();
+                    }
+                }
+            };
+            
+            // Always start on the creation page and load existing data if available
+            gamePage.classList.add('hidden');
+            creationPage.classList.remove('hidden');
+            loadQuizFromStorage();
+        });
+    </script>
+</body>
+</html>
