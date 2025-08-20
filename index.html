@@ -7,116 +7,161 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Import Firebase JS SDK -->
+    <script type="module">
+        // These imports are for the modular SDK, which is the modern way to use Firebase.
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, addDoc, collection, getDocs, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        
+        // --- Your web app's Firebase configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDdPi75Cfl92SxsdHP1ZdoFEDgDDJWygng",
+            authDomain: "name-spinner-app.firebaseapp.com",
+            projectId: "name-spinner-app",
+            storageBucket: "name-spinner-app.firebasestorage.app",
+            messagingSenderId: "663136681592",
+            appId: "1:663136681592:web:06618739cbaaa2dfb9b78d"
+        };
+        // --- END OF FIREBASE CONFIGURATION ---
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Make auth and db globally available for our script
+        window.firebaseServices = { auth, db, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, doc, setDoc, getDoc, addDoc, collection, getDocs, deleteDoc, updateDoc, query, where };
+    </script>
+
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        .number-box.visited {
-            background-color: #6b7280 !important;
-            cursor: default;
-            transform: scale(0.95);
-        }
-        .number-box.visited:hover {
-            transform: scale(0.95);
-            box-shadow: none;
-        }
-        .random-active {
-            transform: scale(1.15) !important;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important;
-        }
-        #confetti-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            overflow: hidden;
-            z-index: 9999;
-        }
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            opacity: 0.7;
-            animation: fall 5s linear forwards;
-        }
-        @keyframes fall {
-            to {
-                transform: translateY(100vh) rotate(360deg);
-                opacity: 0;
-            }
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        body { font-family: 'Inter', sans-serif; }
+        .hidden { display: none !important; }
+        .number-box.visited { background-color: #6b7280 !important; cursor: default; transform: scale(0.95); }
+        .number-box.visited:hover { transform: scale(0.95); box-shadow: none; }
+        .random-active { transform: scale(1.15) !important; box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important; }
+        #confetti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 9999; }
+        .confetti { position: absolute; width: 10px; height: 10px; opacity: 0.7; animation: fall 5s linear forwards; }
+        @keyframes fall { to { transform: translateY(100vh) rotate(360deg); opacity: 0; } }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .option-radio:checked + label { background-color: #3b82f6; color: white; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <!-- Page 1: Quiz Creation -->
-    <div id="creation-page" class="min-h-screen flex items-center justify-center p-4">
+    <!-- Loading Spinner -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-80 flex items-center justify-center z-[10000]">
+        <div class="loader"></div>
+    </div>
+
+    <!-- Auth Page -->
+    <div id="auth-page" class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-white p-8 rounded-2xl shadow-lg">
+            <h1 class="text-4xl font-bold text-center text-gray-800 mb-6">Quiz Master</h1>
+            <div id="auth-container">
+                <!-- Login Form -->
+                <form id="login-form" class="space-y-4">
+                    <h2 class="text-2xl font-semibold text-center">Login</h2>
+                    <input type="email" id="login-email" placeholder="Email" class="w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500" required>
+                    <input type="password" id="login-password" placeholder="Password" class="w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500" required>
+                    <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg">Login</button>
+                    <p class="text-center text-sm">Don't have an account? <a href="#" id="show-signup" class="text-blue-500 hover:underline">Sign up</a></p>
+                </form>
+                <!-- Signup Form -->
+                <form id="signup-form" class="space-y-4 hidden">
+                    <h2 class="text-2xl font-semibold text-center">Sign Up</h2>
+                    <input type="email" id="signup-email" placeholder="Email" class="w-full p-3 border rounded-md focus:ring-2 focus:ring-purple-500" required>
+                    <input type="password" id="signup-password" placeholder="Password" class="w-full p-3 border rounded-md focus:ring-2 focus:ring-purple-500" required>
+                    <button type="submit" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg">Create Account</button>
+                    <p class="text-center text-sm">Already have an account? <a href="#" id="show-login" class="text-purple-500 hover:underline">Login</a></p>
+                </form>
+            </div>
+            <p id="auth-error" class="text-red-500 text-center mt-4"></p>
+        </div>
+    </div>
+
+    <!-- Dashboard Page -->
+    <div id="dashboard-page" class="hidden">
+        <div class="w-full max-w-6xl mx-auto p-6">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="text-4xl font-bold text-gray-800">My Quizzes</h1>
+                <button id="logout-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Logout</button>
+            </div>
+            <button id="create-new-quiz-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-6 rounded-lg text-xl mb-8">
+                + Create New Quiz
+            </button>
+            <div id="quiz-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Quiz cards will be injected here -->
+            </div>
+             <p id="no-quizzes-message" class="text-center text-gray-500 my-16 text-xl hidden">You haven't created any quizzes yet. Click the button above to get started!</p>
+        </div>
+    </div>
+
+    <!-- Creation Page -->
+    <div id="creation-page" class="hidden min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-4xl bg-white p-8 rounded-2xl shadow-lg">
-            <h1 class="text-4xl font-bold text-center text-gray-800 mb-2">Create Your Quiz</h1>
-            <p class="text-center text-gray-500 mb-6">Enter questions manually or upload an Excel file.</p>
+            <div class="flex justify-between items-center">
+                 <h1 id="creation-title" class="text-4xl font-bold text-gray-800 mb-2 truncate pr-4">Create Your Quiz</h1>
+                 <button id="back-to-dashboard-btn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg mb-2 flex-shrink-0">Back to Dashboard</button>
+            </div>
+            <p class="text-center text-gray-500 mb-6">Add questions manually or upload a file.</p>
             
-            <div class="flex justify-center mb-6">
-                <div class="border p-4 rounded-lg w-full max-w-sm">
-                    <h3 class="font-semibold text-lg mb-2 text-center">Upload from File</h3>
-                    <label for="excel-upload-input" class="cursor-pointer w-full text-center block bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
-                        Upload Excel File
-                    </label>
-                    <input type="file" id="excel-upload-input" class="hidden" accept=".xlsx, .xls, .csv">
-                    <p class="text-center text-gray-400 mt-2 text-sm">Questions in column 1, answers in column 2.</p>
+             <div class="flex justify-center mb-6">
+                <div class="border p-4 rounded-lg w-full max-w-md">
+                    <h3 class="font-semibold text-lg mb-2 text-center">
+                        Upload from File
+                        <button id="format-info-btn" class="text-blue-500 font-bold text-xl ml-1 hover:text-blue-700 transition-colors" title="View CSV format info">(?)</button>
+                    </h3>
+                    <div class="space-y-2">
+                        <button id="import-identification-btn" class="w-full text-center block bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">
+                            Import Identification (CSV)
+                        </button>
+                        <button id="import-multiple-choice-btn" class="w-full text-center block bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">
+                            Import Multiple Choice (CSV)
+                        </button>
+                    </div>
+                    <input type="file" id="file-upload-input" class="hidden" accept=".csv">
                 </div>
             </div>
 
-            <div id="questions-container" class="space-y-4 max-h-[40vh] overflow-y-auto pr-4">
-                <p id="empty-state-message" class="text-center text-gray-400 my-8">Click "Add Question" or "Upload Excel File" to get started!</p>
-                <!-- Question and Answer fields will be injected here -->
+            <div id="questions-container" class="space-y-6 max-h-[50vh] overflow-y-auto pr-4">
+                <p id="empty-state-message" class="text-center text-gray-400 my-8">Click "Add Question" to get started!</p>
             </div>
 
             <div class="flex justify-between items-center mt-8">
                 <div>
-                    <button id="add-question-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 mr-2">Add Question Manually</button>
-                    <button id="delete-all-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Delete All</button>
+                    <button id="add-question-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 mr-2">Add Question</button>
                 </div>
-                <button id="save-quiz-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Save & Start Quiz</button>
+                <button id="save-quiz-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Save Quiz</button>
             </div>
-             <p id="error-message" class="text-red-500 text-center mt-4"></p>
+            <p id="error-message" class="text-red-500 text-center mt-4"></p>
         </div>
     </div>
 
-    <!-- Page 2: Quiz Gameplay -->
+    <!-- Game Page -->
     <div id="game-page" class="hidden">
         <div id="confetti-container"></div>
         <div id="quiz-container" class="w-full max-w-7xl mx-auto p-6">
-            <h1 class="text-5xl font-bold text-center text-gray-800 mb-2">Interactive Quiz</h1>
+            <h1 id="game-title" class="text-5xl font-bold text-center text-gray-800 mb-2">Interactive Quiz</h1>
             <h2 class="text-2xl text-center text-gray-500 mb-10">Select a number or let us pick one for you!</h2>
             <div id="number-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-4 mb-10"></div>
             
             <div id="main-controls" class="flex justify-center gap-4 mb-10">
-                <button id="random-pick-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Pick a Random Question</button>
-                <button id="reset-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Reset Quiz</button>
-                <button id="new-quiz-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">Edit Quiz</button>
+                <button id="random-pick-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg">Pick a Random Question</button>
+                <button id="reset-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg">Reset Quiz</button>
+                <button id="game-back-to-dashboard-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg">Back to Dashboard</button>
             </div>
         </div>
 
-        <!-- Modal Structure -->
-        <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden transition-opacity duration-300">
-            <div id="modal" class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-lg text-center transform transition-transform duration-300 scale-95">
+        <!-- Question Modal -->
+        <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+            <div id="modal" class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-lg text-center">
                 <h3 id="modal-question-number" class="text-xl font-bold text-gray-500 mb-4"></h3>
                 <p id="modal-question-text" class="text-2xl text-gray-800 mb-6"></p>
-                <div id="modal-answer-box" class="hidden text-2xl font-bold text-green-800 bg-green-100 border border-green-200 rounded-lg p-4 my-4"></div>
+                <div id="modal-options-container" class="space-y-3 mb-6"></div>
+                <div id="modal-answer-box" class="hidden text-2xl font-bold text-green-800 bg-green-100 p-4 rounded-lg"></div>
                 <div id="modal-controls" class="flex justify-center gap-4 mt-6">
                     <button id="modal-show-answer-btn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg">Show Answer</button>
                     <button id="modal-close-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg">Close</button>
@@ -125,189 +170,470 @@
         </div>
     </div>
 
-    <script>
+    <!-- Title Modal -->
+    <div id="title-modal-overlay" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 hidden">
+        <div id="title-modal" class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
+            <h2 class="text-2xl font-bold text-center mb-4">Quiz Title</h2>
+            <p class="text-center text-gray-600 mb-6">Please enter a title for your new quiz.</p>
+            <input type="text" id="quiz-title-input" class="w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500" placeholder="e.g., World Capitals">
+            <p id="title-error-message" class="text-red-500 text-sm mt-2 hidden">Title cannot be empty.</p>
+            <div class="flex justify-end gap-4 mt-6">
+                <button id="cancel-title-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg">Cancel</button>
+                <button id="save-title-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Format Info Modal -->
+    <div id="format-info-modal-overlay" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-lg">
+            <h2 class="text-2xl font-bold mb-4">CSV Import Formats</h2>
+            <div class="space-y-4 text-left">
+                <div>
+                    <h3 class="font-semibold text-lg">Identification</h3>
+                    <p class="text-gray-600">Use 2 columns in your CSV, with no headers:</p>
+                    <ul class="list-disc list-inside bg-gray-100 p-3 rounded mt-1">
+                        <li><b>Column A:</b> The question</li>
+                        <li><b>Column B:</b> The correct answer</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg">Multiple Choice</h3>
+                    <p class="text-gray-600">Use up to 5 columns in your CSV, with no headers:</p>
+                    <ul class="list-disc list-inside bg-gray-100 p-3 rounded mt-1">
+                        <li><b>Column A:</b> The question</li>
+                        <li><b>Column B:</b> The correct answer</li>
+                        <li><b>Column C:</b> A wrong option</li>
+                        <li><b>Column D:</b> Another wrong option</li>
+                        <li><b>Column E:</b> A final wrong option</li>
+                    </ul>
+                    <p class="text-sm text-gray-500 mt-1">The four options will be shuffled automatically.</p>
+                </div>
+            </div>
+            <div class="flex justify-end mt-6">
+                <button id="close-format-info-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">Got it</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
         document.addEventListener('DOMContentLoaded', () => {
-            // --- Common Elements ---
+            // --- Global State ---
+            let currentUser = null;
+            let currentQuizId = null;
+            let currentQuizTitle = '';
+            let quizData = [];
+            let importType = 'identification'; // Default import type
+            
+            // --- Firebase Services ---
+            const { auth, db, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, doc, setDoc, getDoc, addDoc, collection, getDocs, deleteDoc, updateDoc, query, where } = window.firebaseServices;
+
+            // --- Page Elements ---
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const authPage = document.getElementById('auth-page');
+            const dashboardPage = document.getElementById('dashboard-page');
             const creationPage = document.getElementById('creation-page');
             const gamePage = document.getElementById('game-page');
-            let quizData = [];
+            const allPages = [authPage, dashboardPage, creationPage, gamePage];
+            const titleModalOverlay = document.getElementById('title-modal-overlay');
+            const formatInfoModalOverlay = document.getElementById('format-info-modal-overlay');
 
-            // --- Creation Page Elements & Logic ---
+            // --- UI Navigation ---
+            const showPage = (pageToShow) => {
+                allPages.forEach(page => page.classList.add('hidden'));
+                pageToShow.classList.remove('hidden');
+                loadingOverlay.classList.add('hidden');
+            };
+
+            // --- Auth Logic ---
+            const authError = document.getElementById('auth-error');
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    fetchUserQuizzes();
+                    showPage(dashboardPage);
+                } else {
+                    currentUser = null;
+                    showPage(authPage);
+                }
+            });
+
+            document.getElementById('login-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                loadingOverlay.classList.remove('hidden');
+                const email = document.getElementById('login-email').value;
+                const password = document.getElementById('login-password').value;
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    authError.textContent = '';
+                } catch (error) {
+                    authError.textContent = error.message;
+                    loadingOverlay.classList.add('hidden');
+                }
+            });
+
+            document.getElementById('signup-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                loadingOverlay.classList.remove('hidden');
+                const email = document.getElementById('signup-email').value;
+                const password = document.getElementById('signup-password').value;
+                try {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                    authError.textContent = '';
+                } catch (error) {
+                    authError.textContent = error.message;
+                    loadingOverlay.classList.add('hidden');
+                }
+            });
+
+            document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+            document.getElementById('show-signup').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('login-form').classList.add('hidden'); document.getElementById('signup-form').classList.remove('hidden'); });
+            document.getElementById('show-login').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('signup-form').classList.add('hidden'); document.getElementById('login-form').classList.remove('hidden'); });
+
+            // --- Dashboard Logic ---
+            const quizList = document.getElementById('quiz-list');
+            const noQuizzesMessage = document.getElementById('no-quizzes-message');
+
+            const fetchUserQuizzes = async () => {
+                if (!currentUser) return;
+                loadingOverlay.classList.remove('hidden');
+                quizList.innerHTML = '';
+                const q = query(collection(db, "quizzes"), where("userId", "==", currentUser.uid));
+                const querySnapshot = await getDocs(q);
+                
+                if (querySnapshot.empty) {
+                    noQuizzesMessage.classList.remove('hidden');
+                } else {
+                    noQuizzesMessage.classList.add('hidden');
+                    querySnapshot.forEach((doc) => renderQuizCard(doc.id, doc.data()));
+                }
+                loadingOverlay.classList.add('hidden');
+            };
+
+            const renderQuizCard = (id, data) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-6 rounded-lg shadow-md flex flex-col';
+                const quizTitle = data.title || `Quiz with ${data.questions.length} questions`;
+                card.innerHTML = `
+                    <h3 class="text-2xl font-bold mb-2 flex-grow">${quizTitle}</h3>
+                    <p class="text-gray-600 mb-4">${data.questions.length} Questions</p>
+                    <div class="flex gap-2 mt-auto">
+                        <button data-id="${id}" class="play-btn flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Play</button>
+                        <button data-id="${id}" class="edit-btn flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Edit</button>
+                        <button data-id="${id}" class="delete-btn bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">Delete</button>
+                    </div>`;
+                quizList.appendChild(card);
+            };
+
+            quizList.addEventListener('click', async (e) => {
+                const quizId = e.target.dataset.id;
+                if (!quizId) return;
+
+                const target = e.target;
+                if (target.classList.contains('play-btn')) {
+                    loadingOverlay.classList.remove('hidden');
+                    const quizDoc = await getDoc(doc(db, "quizzes", quizId));
+                    if (quizDoc.exists()) {
+                        const data = quizDoc.data();
+                        quizData = data.questions.map((item, index) => ({ ...item, id: index + 1 }));
+                        document.getElementById('game-title').textContent = data.title || 'Interactive Quiz';
+                        initializeQuiz();
+                        showPage(gamePage);
+                    }
+                } else if (target.classList.contains('edit-btn')) {
+                    loadingOverlay.classList.remove('hidden');
+                    const quizDoc = await getDoc(doc(db, "quizzes", quizId));
+                     if (quizDoc.exists()) {
+                        currentQuizId = quizId;
+                        const data = quizDoc.data();
+                        currentQuizTitle = data.title || 'Your Quiz';
+                        document.getElementById('creation-title').textContent = `Editing: ${currentQuizTitle}`;
+                        deleteAllQuestions();
+                        data.questions.forEach(q => addQuestionField(q));
+                        showPage(creationPage);
+                    }
+                } else if (target.classList.contains('delete-btn')) {
+                    if (confirm('Are you sure you want to delete this quiz?')) {
+                        await deleteDoc(doc(db, "quizzes", quizId));
+                        fetchUserQuizzes();
+                    }
+                }
+            });
+            
+            // --- Title Modal Logic ---
+            const quizTitleInput = document.getElementById('quiz-title-input');
+            const titleErrorMessage = document.getElementById('title-error-message');
+
+            document.getElementById('create-new-quiz-btn').addEventListener('click', () => {
+                quizTitleInput.value = '';
+                titleErrorMessage.classList.add('hidden');
+                titleModalOverlay.classList.remove('hidden');
+                quizTitleInput.focus();
+            });
+
+            document.getElementById('cancel-title-btn').addEventListener('click', () => {
+                titleModalOverlay.classList.add('hidden');
+            });
+
+            document.getElementById('save-title-btn').addEventListener('click', () => {
+                const newTitle = quizTitleInput.value.trim();
+                if (newTitle) {
+                    currentQuizId = null;
+                    currentQuizTitle = newTitle;
+                    document.getElementById('creation-title').textContent = currentQuizTitle;
+                    deleteAllQuestions();
+                    titleModalOverlay.classList.add('hidden');
+                    showPage(creationPage);
+                } else {
+                    titleErrorMessage.classList.remove('hidden');
+                }
+            });
+
+            quizTitleInput.addEventListener('input', () => {
+                if (quizTitleInput.value.trim()) {
+                    titleErrorMessage.classList.add('hidden');
+                }
+            });
+
+
+            document.getElementById('back-to-dashboard-btn').addEventListener('click', () => showPage(dashboardPage));
+            document.getElementById('game-back-to-dashboard-btn').addEventListener('click', () => showPage(dashboardPage));
+
+            // --- Creation Page Logic ---
             const questionsContainer = document.getElementById('questions-container');
             const addQuestionBtn = document.getElementById('add-question-btn');
-            const deleteAllBtn = document.getElementById('delete-all-btn');
             const saveQuizBtn = document.getElementById('save-quiz-btn');
             const errorMessage = document.getElementById('error-message');
             const emptyStateMessage = document.getElementById('empty-state-message');
-            const excelUploadInput = document.getElementById('excel-upload-input');
+            const fileUploadInput = document.getElementById('file-upload-input');
             let questionCount = 0;
 
-            const addQuestionField = (question = '', answer = '') => {
-                if (questionCount >= 60) {
-                    errorMessage.textContent = "You can add a maximum of 60 questions.";
-                    addQuestionBtn.disabled = true;
-                    return;
-                }
-                emptyStateMessage?.classList.add('hidden');
+            // --- CSV Import Logic ---
+            document.getElementById('import-identification-btn').addEventListener('click', () => {
+                importType = 'identification';
+                fileUploadInput.click();
+            });
+
+            document.getElementById('import-multiple-choice-btn').addEventListener('click', () => {
+                importType = 'multiple-choice';
+                fileUploadInput.click();
+            });
+            
+            document.getElementById('format-info-btn').addEventListener('click', () => formatInfoModalOverlay.classList.remove('hidden'));
+            document.getElementById('close-format-info-btn').addEventListener('click', () => formatInfoModalOverlay.classList.add('hidden'));
+
+
+            fileUploadInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const fileData = e.target.result;
+                        // Using xlsx library to parse CSV as well
+                        const workbook = XLSX.read(fileData, { type: 'binary' });
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        
+                        deleteAllQuestions();
+
+                        if (importType === 'identification') {
+                            jsonData.forEach(row => {
+                                if (Array.isArray(row) && row.length >= 2 && String(row[0]).trim() && String(row[1]).trim()) {
+                                    addQuestionField({
+                                        type: 'identification',
+                                        question: String(row[0]).trim(),
+                                        answer: String(row[1]).trim()
+                                    });
+                                }
+                            });
+                        } else if (importType === 'multiple-choice') {
+                             jsonData.forEach(row => {
+                                if (Array.isArray(row) && row.length >= 3 && String(row[0]).trim() && String(row[1]).trim() && String(row[2]).trim()) {
+                                    const question = String(row[0]).trim();
+                                    const answer = String(row[1]).trim();
+                                    const wrongOptions = row.slice(2).map(opt => String(opt).trim()).filter(opt => opt);
+                                    
+                                    if (wrongOptions.length < 1) return; // Need at least one wrong option
+
+                                    const allOptions = [answer, ...wrongOptions].sort(() => Math.random() - 0.5); // Shuffle options
+
+                                    addQuestionField({
+                                        type: 'multiple-choice',
+                                        question: question,
+                                        answer: answer,
+                                        options: allOptions
+                                    });
+                                }
+                            });
+                        }
+
+                    } catch (error) {
+                        console.error("File processing error:", error);
+                        errorMessage.textContent = "Error processing file. Please check the format.";
+                    }
+                };
+                reader.readAsBinaryString(file);
+                event.target.value = ''; // Reset file input
+            });
+
+            const addQuestionField = (data = {}) => {
+                const { type = 'identification', question = '', answer = '', options = ['', '', ''] } = data;
+                emptyStateMessage.classList.add('hidden');
                 questionCount++;
                 const questionId = `q-${Date.now()}-${questionCount}`;
-                const fieldHTML = `
-                    <div id="${questionId}" class="p-4 border rounded-lg bg-gray-50 flex items-center gap-4">
-                        <span class="text-xl font-bold text-gray-500">${questionCount}.</span>
-                        <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="text" placeholder="Question" class="question-input w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500" value="${question}">
-                            <input type="text" placeholder="Answer" class="answer-input w-full p-3 border rounded-md focus:ring-2 focus:ring-blue-500" value="${answer}">
+                const field = document.createElement('div');
+                field.id = questionId;
+                field.className = 'p-4 border rounded-lg bg-gray-50 space-y-3';
+                field.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-4">
+                            <span class="text-xl font-bold text-gray-500">${questionCount}.</span>
+                            <select class="question-type-select p-2 border rounded-md">
+                                <option value="identification" ${type === 'identification' ? 'selected' : ''}>Identification</option>
+                                <option value="multiple-choice" ${type === 'multiple-choice' ? 'selected' : ''}>Multiple Choice</option>
+                            </select>
                         </div>
                         <button class="remove-question-btn text-red-500 hover:text-red-700 font-bold text-2xl">&times;</button>
                     </div>
+                    <input type="text" placeholder="Question" class="question-input w-full p-3 border rounded-md" value="${question}">
+                    <div class="answer-section"></div>
                 `;
-                questionsContainer.insertAdjacentHTML('beforeend', fieldHTML);
+                questionsContainer.appendChild(field);
                 
-                const newField = document.getElementById(questionId);
-                newField.querySelector('.remove-question-btn').addEventListener('click', () => {
-                    newField.remove();
-                    updateQuestionNumbers();
-                    errorMessage.textContent = "";
-                    addQuestionBtn.disabled = false;
-                    if (questionCount === 0) {
-                        emptyStateMessage?.classList.remove('hidden');
+                const answerSection = field.querySelector('.answer-section');
+                const typeSelect = field.querySelector('.question-type-select');
+
+                const renderAnswerSection = () => {
+                    const selectedType = typeSelect.value;
+                    if (selectedType === 'identification') {
+                        answerSection.innerHTML = `<input type="text" placeholder="Answer" class="answer-input w-full p-3 border rounded-md" value="${answer}">`;
+                    } else {
+                        // Ensure there are always 4 options for the UI
+                        const displayOptions = [...options];
+                        while(displayOptions.length < 4) displayOptions.push('');
+
+                        answerSection.innerHTML = `
+                            <div class="space-y-2">
+                                <p class="text-sm text-gray-600">Enter options and select the correct one:</p>
+                                ${displayOptions.slice(0, 4).map((opt, i) => `
+                                    <div class="flex items-center gap-2">
+                                        <input type="radio" name="correct-answer-${questionId}" value="${i}" class="option-radio" ${answer === opt && opt !== '' ? 'checked' : ''}>
+                                        <input type="text" placeholder="Option ${i + 1}" class="option-input w-full p-2 border rounded-md" value="${opt || ''}">
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
                     }
+                };
+
+                typeSelect.addEventListener('change', renderAnswerSection);
+                field.querySelector('.remove-question-btn').addEventListener('click', (e) => {
+                    e.target.closest('.p-4').remove();
+                    updateQuestionNumbers();
                 });
+
+                renderAnswerSection();
+                updateQuestionNumbers();
             };
-            
+
             const updateQuestionNumbers = () => {
                 const allFields = questionsContainer.querySelectorAll('.p-4');
                 allFields.forEach((field, index) => {
                     field.querySelector('span').textContent = `${index + 1}.`;
                 });
                 questionCount = allFields.length;
-            };
-
-            const handleExcelUpload = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const worksheet = workbook.Sheets[firstSheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-                        deleteAllQuestions(); // Clear existing before adding new ones
-                        
-                        const validData = jsonData.filter(row => Array.isArray(row) && row.length >= 2 && String(row[0]).trim() && String(row[1]).trim());
-
-                        if (validData.length > 60) {
-                             errorMessage.textContent = "Your file has over 60 questions. Only the first 60 were imported.";
-                             validData.splice(60);
-                        } else {
-                             errorMessage.textContent = "";
-                        }
-
-                        if (validData.length === 0) {
-                             errorMessage.textContent = "Could not find any valid questions and answers in the uploaded file.";
-                             emptyStateMessage?.classList.remove('hidden');
-                             return;
-                        }
-
-                        validData.forEach(row => {
-                            const question = String(row[0]).trim();
-                            const answer = String(row[1]).trim();
-                            addQuestionField(question, answer);
-                        });
-                        updateQuestionNumbers();
-                    } catch (error) {
-                        console.error("Error processing file:", error);
-                        errorMessage.textContent = "Error processing file. Please ensure it's a valid Excel (.xlsx, .xls) or CSV file.";
-                    }
-                };
-                reader.onerror = (error) => {
-                    console.error("File read error:", error);
-                    errorMessage.textContent = "The selected file could not be read.";
-                };
-                reader.readAsArrayBuffer(file);
-                event.target.value = ''; // Reset file input
+                if (questionCount === 0) emptyStateMessage.classList.remove('hidden');
             };
 
             const deleteAllQuestions = () => {
                 questionsContainer.innerHTML = '';
                 questionsContainer.appendChild(emptyStateMessage);
                 emptyStateMessage.classList.remove('hidden');
-                questionCount = 0;
-                errorMessage.textContent = "";
-                addQuestionBtn.disabled = false;
+                updateQuestionNumbers();
             };
 
             addQuestionBtn.addEventListener('click', () => addQuestionField());
-            deleteAllBtn.addEventListener('click', deleteAllQuestions);
-            excelUploadInput.addEventListener('change', handleExcelUpload);
 
-
-            saveQuizBtn.addEventListener('click', () => {
+            saveQuizBtn.addEventListener('click', async () => {
                 let validQuestions = [];
                 const questionFields = questionsContainer.querySelectorAll('.p-4');
-                
                 errorMessage.textContent = "";
 
-                questionFields.forEach((field) => {
-                    const questionInput = field.querySelector('.question-input');
-                    const answerInput = field.querySelector('.answer-input');
-                    const question = questionInput.value.trim();
-                    const answer = answerInput.value.trim();
+                questionFields.forEach(field => {
+                    const type = field.querySelector('.question-type-select').value;
+                    const question = field.querySelector('.question-input').value.trim();
+                    let answer = '';
+                    let options = [];
+                    let isValid = false;
 
-                    if (question && answer) {
-                        validQuestions.push({ question, answer });
+                    if (type === 'identification') {
+                        answer = field.querySelector('.answer-input').value.trim();
+                        if (question && answer) isValid = true;
+                    } else {
+                        const optionInputs = Array.from(field.querySelectorAll('.option-input'));
+                        const radioButtons = Array.from(field.querySelectorAll('.option-radio'));
+                        const checkedRadio = radioButtons.find(rb => rb.checked);
+                        
+                        options = optionInputs.map(input => input.value.trim()).filter(opt => opt); // Filter out empty options
+                        if (checkedRadio) {
+                            answer = optionInputs[checkedRadio.value].value.trim();
+                        }
+
+                        if (question && answer && options.length > 1 && options.includes(answer)) {
+                             isValid = true;
+                        }
+                    }
+
+                    if (isValid) {
+                        validQuestions.push({ type, question, answer, options });
                     }
                 });
 
-                if (validQuestions.length < 3) {
-                    errorMessage.textContent = "Please enter at least 3 valid questions to save the quiz.";
+                if (validQuestions.length < 1) {
+                    errorMessage.textContent = "Please complete at least 1 valid question.";
                     return;
                 }
                 
-                quizData = validQuestions.map((item, index) => ({
-                    id: index + 1,
-                    question: item.question,
-                    answer: item.answer
-                }));
+                const quizPayload = {
+                    userId: currentUser.uid,
+                    title: currentQuizTitle,
+                    questions: validQuestions,
+                    updatedAt: new Date()
+                };
 
-                localStorage.setItem('customQuizData', JSON.stringify(quizData));
-                creationPage.classList.add('hidden');
-                gamePage.classList.remove('hidden');
-                initializeQuiz();
+                loadingOverlay.classList.remove('hidden');
+                try {
+                    if (currentQuizId) {
+                        await updateDoc(doc(db, "quizzes", currentQuizId), quizPayload);
+                    } else {
+                        quizPayload.createdAt = new Date();
+                        await addDoc(collection(db, "quizzes"), quizPayload);
+                    }
+                    fetchUserQuizzes();
+                    showPage(dashboardPage);
+                } catch (error) {
+                    errorMessage.textContent = "Could not save quiz. " + error.message;
+                    loadingOverlay.classList.add('hidden');
+                }
             });
 
-            // --- Game Page Elements & Logic ---
+            // --- Game Page Logic ---
             const numberGrid = document.getElementById('number-grid');
             const randomPickBtn = document.getElementById('random-pick-btn');
             const resetBtn = document.getElementById('reset-btn');
-            const newQuizBtn = document.getElementById('new-quiz-btn');
             const modalOverlay = document.getElementById('modal-overlay');
-            const modal = document.getElementById('modal');
             const modalQuestionNumber = document.getElementById('modal-question-number');
             const modalQuestionText = document.getElementById('modal-question-text');
+            const modalOptionsContainer = document.getElementById('modal-options-container');
             const modalAnswerBox = document.getElementById('modal-answer-box');
             const modalShowAnswerBtn = document.getElementById('modal-show-answer-btn');
             const modalCloseBtn = document.getElementById('modal-close-btn');
 
-            let currentAnswer = '';
+            let currentQuestionData = {};
             let availableQuestionIds = [];
 
             const initializeQuiz = () => {
-                const storedData = localStorage.getItem('customQuizData');
-                if (storedData) {
-                    quizData = JSON.parse(storedData);
-                }
-
-                if (quizData.length === 0) {
-                    gamePage.classList.add('hidden');
-                    creationPage.classList.remove('hidden');
-                    return;
-                }
-
                 numberGrid.innerHTML = '';
                 availableQuestionIds = quizData.map(q => q.id);
                 randomPickBtn.textContent = "Pick a Random Question";
@@ -316,7 +642,7 @@
 
                 quizData.forEach(q => {
                     const box = document.createElement('div');
-                    box.className = 'number-box bg-blue-500 text-white rounded-lg p-5 text-4xl font-bold cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl hover:scale-105 flex items-center justify-center';
+                    box.className = 'number-box bg-blue-500 text-white rounded-lg p-5 text-4xl font-bold cursor-pointer transition-all shadow-md hover:shadow-xl hover:scale-105 flex items-center justify-center';
                     box.textContent = q.id;
                     box.dataset.id = q.id;
                     numberGrid.appendChild(box);
@@ -324,29 +650,34 @@
             };
 
             const displayQuestion = (id) => {
-                const questionData = quizData.find(q => q.id === id);
-                if (!questionData) return;
+                currentQuestionData = quizData.find(q => q.id === id);
+                if (!currentQuestionData) return;
 
                 const box = numberGrid.querySelector(`.number-box[data-id='${id}']`);
                 if (box.classList.contains('visited')) return;
 
-                modalQuestionNumber.textContent = `Question #${questionData.id}`;
-                modalQuestionText.textContent = questionData.question;
-                currentAnswer = questionData.answer;
+                modalQuestionNumber.textContent = `Question #${currentQuestionData.id}`;
+                modalQuestionText.textContent = currentQuestionData.question;
+                modalOptionsContainer.innerHTML = '';
+
+                if (currentQuestionData.type === 'multiple-choice') {
+                    // Shuffle options for display
+                    const shuffledOptions = [...currentQuestionData.options].sort(() => Math.random() - 0.5);
+                    shuffledOptions.forEach(option => {
+                        const optionEl = document.createElement('div');
+                        optionEl.className = 'border p-3 rounded-lg text-lg';
+                        optionEl.textContent = option;
+                        modalOptionsContainer.appendChild(optionEl);
+                    });
+                }
 
                 modalAnswerBox.classList.add('hidden');
                 modalShowAnswerBtn.classList.remove('hidden');
                 modalOverlay.classList.remove('hidden');
-                setTimeout(() => {
-                    modalOverlay.classList.remove('opacity-0');
-                    modal.classList.remove('scale-95');
-                }, 10);
 
                 box.classList.add('visited');
                 const index = availableQuestionIds.indexOf(id);
-                if (index > -1) {
-                    availableQuestionIds.splice(index, 1);
-                }
+                if (index > -1) availableQuestionIds.splice(index, 1);
 
                 if (availableQuestionIds.length === 0) {
                     randomPickBtn.textContent = "Quiz Complete!";
@@ -354,7 +685,7 @@
                     launchConfetti();
                 }
             };
-
+            
             const startRandomAnimation = () => {
                 const availableBoxes = Array.from(numberGrid.querySelectorAll('.number-box:not(.visited)'));
                 if (availableBoxes.length === 0) return;
@@ -362,17 +693,12 @@
                 randomPickBtn.disabled = true;
                 const duration = 2000;
                 const interval = 100;
-                const colors = ['#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
                 let lastBox = null;
 
                 const animation = setInterval(() => {
-                    if (lastBox) {
-                        lastBox.classList.remove('random-active');
-                        lastBox.style.backgroundColor = '';
-                    }
+                    if (lastBox) lastBox.classList.remove('random-active');
                     const randomBox = availableBoxes[Math.floor(Math.random() * availableBoxes.length)];
                     randomBox.classList.add('random-active');
-                    randomBox.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
                     lastBox = randomBox;
                 }, interval);
 
@@ -380,72 +706,47 @@
                     clearInterval(animation);
                     if (lastBox) {
                         lastBox.classList.remove('random-active');
-                        lastBox.style.backgroundColor = '';
-                        const finalId = parseInt(lastBox.dataset.id);
-                        displayQuestion(finalId);
+                        displayQuestion(parseInt(lastBox.dataset.id));
                     }
-                    if (availableQuestionIds.length > 0) {
-                        randomPickBtn.disabled = false;
-                    }
+                    if (availableQuestionIds.length > 0) randomPickBtn.disabled = false;
                 }, duration);
             };
 
-            const closeModal = () => {
-                modalOverlay.classList.add('opacity-0');
-                modal.classList.add('scale-95');
-                setTimeout(() => {
-                    modalOverlay.classList.add('hidden');
-                }, 300);
-            };
+            const closeModal = () => modalOverlay.classList.add('hidden');
 
             const launchConfetti = () => {
-                const confettiContainer = document.getElementById('confetti-container');
-                const confettiColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+                const container = document.getElementById('confetti-container');
+                container.innerHTML = '';
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
                 for (let i = 0; i < 150; i++) {
                     const confetti = document.createElement('div');
-                    confetti.classList.add('confetti');
+                    confetti.className = 'confetti';
                     confetti.style.left = Math.random() * 100 + 'vw';
                     confetti.style.animationDuration = Math.random() * 3 + 2 + 's';
-                    confetti.style.backgroundColor = confettiColors[Math.floor(Math.random() * confettiColors.length)];
-                    const size = Math.random() * 8 + 6;
-                    confetti.style.width = `${size}px`;
-                    confetti.style.height = `${size}px`;
-                    confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
-                    confettiContainer.appendChild(confetti);
+                    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    container.appendChild(confetti);
                 }
             };
 
-            numberGrid.addEventListener('click', (event) => {
-                if (event.target.classList.contains('number-box')) {
-                    const id = parseInt(event.target.dataset.id);
-                    displayQuestion(id);
+            numberGrid.addEventListener('click', (e) => {
+                if (e.target.classList.contains('number-box')) {
+                    displayQuestion(parseInt(e.target.dataset.id));
                 }
             });
 
             modalShowAnswerBtn.addEventListener('click', () => {
-                modalAnswerBox.textContent = currentAnswer;
+                modalAnswerBox.textContent = currentQuestionData.answer;
                 modalAnswerBox.classList.remove('hidden');
                 modalShowAnswerBtn.classList.add('hidden');
             });
 
             modalCloseBtn.addEventListener('click', closeModal);
-            modalOverlay.addEventListener('click', (event) => {
-                if (event.target === modalOverlay) {
-                    closeModal();
-                }
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) closeModal();
             });
 
             randomPickBtn.addEventListener('click', startRandomAnimation);
             resetBtn.addEventListener('click', initializeQuiz);
-            newQuizBtn.addEventListener('click', () => {
-                gamePage.classList.add('hidden');
-                creationPage.classList.remove('hidden');
-            });
-            
-            // --- Initial Load ---
-            // Always start on the creation page
-            gamePage.classList.add('hidden');
-            creationPage.classList.remove('hidden');
         });
     </script>
 </body>
