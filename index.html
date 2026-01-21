@@ -38,7 +38,7 @@
     </script>
 
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
         .hidden { display: none !important; }
         .number-box.visited { background-color: #6b7280 !important; cursor: default; transform: scale(0.95); }
         .number-box.visited:hover { transform: scale(0.95); box-shadow: none; }
@@ -160,8 +160,8 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <button id="import-pdf-btn" class="group relative flex flex-col items-center justify-center p-6 border-2 border-dashed border-blue-300 rounded-lg hover:bg-blue-50 hover:border-blue-500 transition cursor-pointer">
                             <i data-lucide="file-text" class="w-8 h-8 text-blue-500 mb-2 group-hover:scale-110 transition"></i>
-                            <span class="font-bold text-blue-600">Generate from PDF</span>
-                            <span class="text-xs text-blue-400 mt-1">AI-Powered</span>
+                            <span class="font-bold text-blue-600">Generate from PDF(s)</span>
+                            <span class="text-xs text-blue-400 mt-1">AI-Powered • Multiple files</span>
                             <span class="absolute top-2 right-2 bg-gradient-to-r from-pink-500 to-violet-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">NEW</span>
                         </button>
                         
@@ -179,7 +179,7 @@
                          <button id="format-info-btn" class="text-sm text-blue-500 hover:text-blue-700 underline">View CSV Formats</button>
                     </div>
                     <input type="file" id="file-upload-input" class="hidden" accept=".csv">
-                    <input type="file" id="pdf-upload-input" class="hidden" accept="application/pdf">
+                    <input type="file" id="pdf-upload-input" class="hidden" accept="application/pdf" multiple>
                 </div>
 
                 <!-- Questions List -->
@@ -322,6 +322,31 @@
     </script>
 
     <script type="module">
+        import { getGeminiApiKey } from './config.js';
+        
+        // --- Anti-Inspection Script ---
+        // Disable Right Click
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+        // Disable Common Keyboard Shortcuts for Inspection
+        document.onkeydown = function(e) {
+            if(e.keyCode == 123) { // F12
+                return false;
+            }
+            if(e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) { // Ctrl+Shift+I
+                return false;
+            }
+            if(e.ctrlKey && e.shiftKey && e.keyCode == 'C'.charCodeAt(0)) { // Ctrl+Shift+C
+                return false;
+            }
+            if(e.ctrlKey && e.shiftKey && e.keyCode == 'J'.charCodeAt(0)) { // Ctrl+Shift+J
+                return false;
+            }
+            if(e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) { // Ctrl+U (View Source)
+                return false;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // Setup PDF.js worker
             if (window.pdfjsLib) {
@@ -336,8 +361,7 @@
             let importType = 'identification';
             let pendingPdfText = '';
             
-            // --- API Configuration ---
-            const GEMINI_API_KEY = "AIzaSyAH3eRDIPY7rKsR_c6crX64DXeis2_YkNI"; // Provided API Key
+            // API key is now imported from config.js
 
             // --- Firebase Services ---
             const { auth, db, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, doc, setDoc, getDoc, addDoc, collection, getDocs, deleteDoc, updateDoc, query, where } = window.firebaseServices;
@@ -562,7 +586,6 @@
             // --- Gemini PDF Logic ---
             const extractTextFromPDF = async (file) => {
                 const arrayBuffer = await file.arrayBuffer();
-                // Fix: Pass Uint8Array to PDF.js instead of ArrayBuffer
                 const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
                 let fullText = "";
                 
@@ -588,14 +611,14 @@
                 - "options": array of 4 strings (only required for multiple-choice, one must be the correct answer)
 
                 Text to analyze:
-                "${text.substring(0, 10000)}" 
+                "${text.substring(0, 30000)}" 
                 (Text truncated for limit)
 
                 Output ONLY the raw JSON. No markdown code blocks, no "Here is the JSON".
                 `;
 
                 try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${getGeminiApiKey()}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -629,7 +652,7 @@
                     return questions;
                 } catch (error) {
                     console.error("Gemini Error:", error);
-                    throw new Error("Failed to generate quiz from AI.");
+                    throw new Error("Failed to generate quiz from AI: " + error.message);
                 }
             };
 
@@ -637,20 +660,26 @@
                 pdfUploadInput.click();
             });
 
+            // UPDATED: Handle Multiple PDFs
             pdfUploadInput.addEventListener('change', async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
+                const files = Array.from(event.target.files);
+                if (files.length === 0) return;
 
                 try {
-                    showLoading("Reading PDF...");
-                    const text = await extractTextFromPDF(file);
+                    showLoading(`Reading ${files.length} PDF(s)...`);
                     
-                    if (!text.trim()) {
-                        throw new Error("No text found in PDF. Scanned PDFs (images) are not supported.");
+                    let combinedText = "";
+                    for (const file of files) {
+                        const text = await extractTextFromPDF(file);
+                        combinedText += `\n--- Content from ${file.name} ---\n${text}`;
+                    }
+                    
+                    if (!combinedText.trim()) {
+                        throw new Error("No text found in PDF(s). Scanned PDFs (images) are not supported.");
                     }
 
                     hideLoading(); // Done reading, now ask user
-                    pendingPdfText = text;
+                    pendingPdfText = combinedText;
                     document.getElementById('question-count-modal-overlay').classList.remove('hidden');
 
                 } catch (error) {
